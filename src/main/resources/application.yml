@@ -3,11 +3,10 @@ spring:
     name: WakeThemAllBot
   data:
     redis:
-      host: assuring-humpback-16449.upstash.io
-      port: 6379
-      password: AUBBAAIjcDE5NDA2NjY1OTJiZGQ0YmI5ODZjYWNkNDY4Nzc3MDljN3AxMA
       ssl:
         enabled: true
 logging:
   level:
     root: INFO
+server:
+  port: ${PORT:8080}
