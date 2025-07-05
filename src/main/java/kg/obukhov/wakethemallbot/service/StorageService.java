@@ -8,53 +8,49 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.objects.User;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 @Service
 public class StorageService {
 
-    private static final String USERS_KEY = "users";
-
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-    private final JavaType mapType;
+    private final JavaType setType;
 
     public StorageService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
-        mapType = objectMapper.getTypeFactory().constructMapType(
-                Map.class,
-                objectMapper.getTypeFactory().constructType(Long.class),
-                objectMapper.getTypeFactory().constructCollectionType(Set.class, User.class)
-        );
+        setType = objectMapper.getTypeFactory().constructCollectionType(Set.class, User.class);
     }
 
-    public Map<Long, Set<User>> readUsers() {
+    public Set<User> readUsers(String key) {
         try {
-            String json = redisTemplate.opsForValue().get(USERS_KEY);
-            return objectMapper.readValue(json, mapType);
+            String json = redisTemplate.opsForValue().get(key);
+            return objectMapper.readValue(json, setType);
         } catch (Exception e) {
             throw new StorageException("Failed to load users", e);
         }
     }
 
-    public void addUserToChat(long chatId, User user) {
+    public void addUserToChat(String key, User user) {
         try {
-            String json = redisTemplate.opsForValue().get(USERS_KEY);
+            String json = redisTemplate.opsForValue().get(key);
 
-            Map<Long, Set<User>> chatMap = StringUtils.isBlank(json)
-                    ? new HashMap<>()
-                    : objectMapper.readValue(json, mapType);
+            Set<User> users = StringUtils.isBlank(json)
+                    ? new HashSet<>()
+                    : objectMapper.readValue(json, setType);
 
-            chatMap.computeIfAbsent(chatId, key -> new HashSet<>()).add(user);
+            if (users.contains(user)) {
+                return;
+            }
 
-            String updatedJson = objectMapper.writeValueAsString(chatMap);
-            redisTemplate.opsForValue().set(USERS_KEY, updatedJson);
+            users.add(user);
+
+            String updatedJson = objectMapper.writeValueAsString(users);
+            redisTemplate.opsForValue().set(key, updatedJson);
         } catch (Exception e) {
-            throw new StorageException("Failed to add user " + user.getUserName() + " to chat " + chatId, e);
+            throw new StorageException("Failed to add user " + user.getUserName() + " to chat " + key, e);
         }
     }
 

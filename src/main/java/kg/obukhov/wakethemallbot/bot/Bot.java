@@ -60,16 +60,14 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
-    private void saveUser(Long chatId, User user) {
-        if (user.getIsBot()) {
-            return;
+    private void saveUser(long chatId, User user) {
+        if (!user.getIsBot()) {
+            storageService.addUserToChat(String.valueOf(chatId), user);
         }
-
-        storageService.addUserToChat(chatId, user);
     }
 
-    private void sendMentionAll(Long chatId, User from) {
-        Set<User> chatUsers = storageService.readUsers().get(chatId);
+    private void sendMentionAll(long chatId, User from) {
+        Set<User> chatUsers = storageService.readUsers(String.valueOf(chatId));
         chatUsers = chatUsers.stream()
                 .filter(user -> !from.getUserName().equals(user.getUserName()))
                 .distinct()
@@ -84,7 +82,7 @@ public class Bot extends TelegramLongPollingBot {
         String text = getMessageText(chatId, from, chatUsers);
 
         SendMessage message = SendMessage.builder()
-                .chatId(chatId.toString())
+                .chatId(chatId)
                 .text(text)
                 .parseMode("MarkdownV2")
                 .disableWebPagePreview(true)
