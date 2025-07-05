@@ -1,10 +1,10 @@
 package kg.obukhov.wakethemallbot.bot;
 
 import kg.obukhov.wakethemallbot.config.BotProperties;
+import kg.obukhov.wakethemallbot.service.StorageService;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -18,106 +18,65 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
-@Component
 public class Bot extends TelegramLongPollingBot {
 
-    private static final List<String> HARDCODED_USERNAMES = List.of(
-            "DC_kzhakypova",
-            "DC_aibraimova",
-            "DC_rseitbelialov",
-            "DC_mkazachukhin",
-            "DC_rabdilamituulu",
-            "dc_ksaryeva",
-            "DC_Kfedorenko",
-            "DC_ertashtanbekov",
-            "DC_adalymbekov",
-            "DC_erashidova",
-            "DC_asutsepina",
-            "DC_basakeev",
-            "kanaabakir",
-            "DC_ibolotov",
-            "dc_amamytova",
-            "dc_aiatchenko",
-            "dc_nporvani",
-            "DC_ARashidov",
-            "DC_pimangazieva",
-            "dc_razimova",
-            "DC_AShkuratenko",
-            "DC_nchybyeva"
-    );
-    public static final Set<Long> ALLOWED_CHAT_IDS = Set.of(-4894980653L, -4836567752L);
-    public static final long HARDCODED_CHAT_ID = -4836567752L;
-    public static final String[] TRIGGER_COMMANDS = {"/all", "@all"};
+    private static final String[] TRIGGER_COMMANDS = {"/all", "@all"};
+    public static final Set<String> ALL_GROUP_MEMBER_STATUSES = Set.of("member", "administrator", "creator");
 
-    private final Map<Long, Set<User>> activeUsers = new HashMap<>();
+    private final StorageService storageService;
 
     @Getter
     private final String botUsername;
 
-    public Bot(BotProperties properties) {
+    public Bot(StorageService storageService, BotProperties properties) {
         super(properties.getToken());
+        this.storageService = storageService;
         this.botUsername = properties.getUsername();
-        addHardcodedUsers();
-    }
-
-    private void addHardcodedUsers() {
-        Set<User> users = new HashSet<>();
-        for (int i = 0; i < HARDCODED_USERNAMES.size(); i++) {
-            User user = new User();
-            user.setIsBot(false);
-            user.setUserName(HARDCODED_USERNAMES.get(i));
-            user.setId((long) i);
-            users.add(user);
-        }
-        activeUsers.put(HARDCODED_CHAT_ID, users);
     }
 
     @Override
     public void onUpdateReceived(Update update) {
+        log.debug("Update received: {}", update);
+
         if (update.hasMyChatMember()) {
             long chatId = update.getMyChatMember().getChat().getId();
-            if (ALLOWED_CHAT_IDS.contains(chatId)) {
-                User from = update.getMyChatMember().getFrom();
-                saveActiveUser(chatId, from);
-            }
+            User from = update.getMyChatMember().getFrom();
+            saveUser(chatId, from);
         }
 
         if (update.hasMessage()) {
             Message message = update.getMessage();
             long chatId = message.getChatId();
-            if (ALLOWED_CHAT_IDS.contains(chatId)) {
-                User from = message.getFrom();
-                saveActiveUser(chatId, from);
+            User from = message.getFrom();
+            saveUser(chatId, from);
 
-                if (message.hasText()) {
-                    String text = message.getText();
+            if (message.hasText()) {
+                String text = message.getText();
 
-                    if (StringUtils.containsAnyIgnoreCase(text, TRIGGER_COMMANDS)) {
-                        sendMentionAll(chatId, from);
-                    }
+                if (StringUtils.containsAnyIgnoreCase(text, TRIGGER_COMMANDS)) {
+                    sendMentionAll(chatId, from);
                 }
             }
         }
     }
 
-    private void saveActiveUser(Long chatId, User user) {
+    private void saveUser(Long chatId, User user) {
         if (user.getIsBot()) {
             return;
         }
 
-        Set<User> users = activeUsers.get(chatId);
-        if (users == null) {
-            users = new HashSet<>();
-        }
-        users.add(user);
-
-        activeUsers.put(chatId, users);
+        storageService.addUserToChat(chatId, user);
     }
 
     private void sendMentionAll(Long chatId, User from) {
-        Set<User> chatUsers = activeUsers.get(chatId);
+        Set<User> chatUsers = storageService.readUsers().get(chatId);
+        chatUsers = chatUsers.stream()
+                .filter(user -> !from.getUserName().equals(user.getUserName()))
+                .distinct()
+                .filter(user -> isUserInGroup(chatId, user.getId()))
+                .collect(Collectors.toSet());
 
-        if (chatUsers == null || chatUsers.isEmpty()) {
+        if (chatUsers.isEmpty()) {
             sendTextMessage(chatId, "Нет активных пользователей для упоминания");
             return;
         }
@@ -144,7 +103,7 @@ public class Bot extends TelegramLongPollingBot {
         return users.stream()
                 .filter(user -> !from.getUserName().equals(user.getUserName()))
                 .distinct()
-                .filter(user -> isUserStillInGroup(chatId, user.getId()))
+                .filter(user -> isUserInGroup(chatId, user.getId()))
                 .map(Bot::getMentionString)
                 .collect(Collectors.joining(System.lineSeparator()));
     }
@@ -160,7 +119,7 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private static String escapeMarkdownV2(String text) {
-        return text.replaceAll("([_\\*\\[\\]\\(\\)~`>#+\\-=|{}.!])", "\\\\$1");
+        return text.replaceAll("([_*\\[\\]()~`>#+\\-=|{}.!])", "\\\\$1");
     }
 
     private void sendTextMessage(Long chatId, String text) {
@@ -175,11 +134,7 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
-    public boolean isUserStillInGroup(Long chatId, Long userId) {
-        if (userId < HARDCODED_USERNAMES.size()) {
-            return true;
-        }
-
+    public boolean isUserInGroup(Long chatId, Long userId) {
         GetChatMember getChatMember = new GetChatMember();
         getChatMember.setChatId(chatId.toString());
         getChatMember.setUserId(userId);
@@ -187,7 +142,7 @@ public class Bot extends TelegramLongPollingBot {
         try {
             ChatMember chatMember = execute(getChatMember);
             String status = chatMember.getStatus();
-            return List.of("member", "administrator", "creator").contains(status);
+            return ALL_GROUP_MEMBER_STATUSES.contains(status);
         } catch (TelegramApiException e) {
             log.warn("Failed to check user {} in chat {}: {}", userId, chatId, e.getMessage());
             return false;
