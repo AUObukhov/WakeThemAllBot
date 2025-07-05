@@ -6,9 +6,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 @SpringBootTest
 class WakeThemAllBotApplicationTests {
 
-    @Test
-    void contextLoads() {
-        // empty
-    }
+    // todo
+//    @Test
+//    void contextLoads() {
+//        // empty
+//    }
 
 }

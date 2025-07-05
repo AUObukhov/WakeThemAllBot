@@ -1,3 +1,12 @@
 spring:
   application:
     name: WakeThemAllBot
+  data:
+    redis:
+      ssl:
+        enabled: true
+logging:
+  level:
+    root: INFO
+server:
+  port: ${PORT:8080}

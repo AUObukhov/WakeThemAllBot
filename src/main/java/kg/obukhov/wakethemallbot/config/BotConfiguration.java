@@ -1,6 +1,8 @@
 package kg.obukhov.wakethemallbot.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import kg.obukhov.wakethemallbot.bot.Bot;
+import kg.obukhov.wakethemallbot.service.StorageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.Bean;
@@ -15,10 +17,15 @@ import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 public class BotConfiguration {
 
     @Bean
-    public Bot bot(BotProperties botProperties) throws TelegramApiException {
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
+
+    @Bean
+    public Bot bot(StorageService storageService, BotProperties botProperties) throws TelegramApiException {
         TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
 
-        Bot bot = new Bot(botProperties);
+        Bot bot = new Bot(storageService, botProperties);
         botsApi.registerBot(bot);
 
         log.info("{} started!", botProperties.getUsername());
