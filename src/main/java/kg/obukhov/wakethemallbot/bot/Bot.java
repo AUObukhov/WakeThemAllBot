@@ -47,14 +47,14 @@ public class Bot extends TelegramLongPollingBot {
         if (update.hasMessage()) {
             Message message = update.getMessage();
             long chatId = message.getChatId();
-            User from = message.getFrom();
-            saveUser(chatId, from);
+            User author = message.getFrom();
+            saveUser(chatId, author);
 
             if (message.hasText()) {
                 String text = message.getText();
 
                 if (StringUtils.containsAnyIgnoreCase(text, TRIGGER_COMMANDS)) {
-                    sendMentionAll(chatId, from);
+                    sendMentionAll(chatId, message.getMessageId(), author);
                 }
             }
         }
@@ -66,10 +66,10 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
-    private void sendMentionAll(long chatId, User from) {
+    private void sendMentionAll(long chatId, Integer replyToMessageId, User author) {
         Set<User> chatUsers = storageService.readUsers(String.valueOf(chatId));
         chatUsers = chatUsers.stream()
-                .filter(user -> !from.getUserName().equals(user.getUserName()))
+                .filter(user -> !author.getUserName().equals(user.getUserName()))
                 .distinct()
                 .filter(user -> isUserInGroup(chatId, user.getId()))
                 .collect(Collectors.toSet());
@@ -79,9 +79,10 @@ public class Bot extends TelegramLongPollingBot {
             return;
         }
 
-        String text = getMessageText(chatId, from, chatUsers);
+        String text = getMessageText(chatId, author, chatUsers);
 
         SendMessage message = SendMessage.builder()
+                .replyToMessageId(replyToMessageId)
                 .chatId(chatId)
                 .text(text)
                 .parseMode("MarkdownV2")
