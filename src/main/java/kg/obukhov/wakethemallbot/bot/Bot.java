@@ -3,6 +3,7 @@ package kg.obukhov.wakethemallbot.bot;
 import kg.obukhov.wakethemallbot.config.BotProperties;
 import kg.obukhov.wakethemallbot.service.StorageService;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
@@ -14,14 +15,16 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMember;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.util.*;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
 public class Bot extends TelegramLongPollingBot {
 
-    private static final String[] TRIGGER_COMMANDS = {"/all", "@all"};
+    private static final String[] MENTION_ALL_COMMANDS = {"/all", "@all", "/everyone", "@everyone"};
+    private static final String[] MENTION_ADMIN_COMMANDS = {"/admins", "@admins", "/administrators", "@administrators"};
     public static final Set<String> ALL_GROUP_MEMBER_STATUSES = Set.of("member", "administrator", "creator");
+    public static final Set<String> ADMIN_GROUP_MEMBER_STATUSES = Set.of("administrator", "creator");
     public static final String MESSAGE_DELETED_ERROR = "[400] Bad Request: message to be replied not found";
     public static final String SEND_FAILED_MESSAGE = "Мой автор криворукий, поэтому я не смог отправить уведомление";
 
@@ -55,8 +58,10 @@ public class Bot extends TelegramLongPollingBot {
             if (message.hasText()) {
                 String text = message.getText();
 
-                if (StringUtils.containsAnyIgnoreCase(text, TRIGGER_COMMANDS)) {
-                    sendMentionAll(chatId, message.getMessageId(), author);
+                if (StringUtils.containsAnyIgnoreCase(text, MENTION_ALL_COMMANDS)) {
+                    sendMentions(chatId, message.getMessageId(), author, ALL_GROUP_MEMBER_STATUSES);
+                } else if (StringUtils.containsAnyIgnoreCase(text, MENTION_ADMIN_COMMANDS)) {
+                    sendMentions(chatId, message.getMessageId(), author, ADMIN_GROUP_MEMBER_STATUSES);
                 }
             }
         }
@@ -68,20 +73,20 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
-    private void sendMentionAll(long chatId, Integer replyToMessageId, User author) {
+    private void sendMentions(long chatId, Integer replyToMessageId, User author, Set<String> memberStatuses) {
         Set<User> chatUsers = storageService.readUsers(String.valueOf(chatId));
         chatUsers = chatUsers.stream()
                 .filter(user -> !author.getUserName().equals(user.getUserName()))
                 .distinct()
-                .filter(user -> isUserInGroup(chatId, user.getId()))
+                .filter(user -> isUserGroupMember(chatId, user.getId(), memberStatuses))
                 .collect(Collectors.toSet());
 
         if (chatUsers.isEmpty()) {
-            sendTextMessage(chatId, "Нет активных пользователей для упоминания");
+            sendTextMessage(chatId, "Не удалось найти подходящих пользователей для упоминания");
             return;
         }
 
-        String text = getMessageText(chatId, author, chatUsers);
+        String text = getMessageText(chatUsers);
 
         reply(chatId, text, replyToMessageId);
     }
@@ -125,11 +130,9 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
-    private String getMessageText(Long chatId, User from, Set<User> users) {
+    private String getMessageText(Set<User> users) {
         return users.stream()
-                .filter(user -> !from.getUserName().equals(user.getUserName()))
                 .distinct()
-                .filter(user -> isUserInGroup(chatId, user.getId()))
                 .map(Bot::getMentionString)
                 .collect(Collectors.joining(System.lineSeparator()));
     }
@@ -160,15 +163,15 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
-    public boolean isUserInGroup(Long chatId, Long userId) {
+    public boolean isUserGroupMember(long chatId, @NonNull Long userId, Set<String> memberStatuses) {
         GetChatMember getChatMember = new GetChatMember();
-        getChatMember.setChatId(chatId.toString());
+        getChatMember.setChatId(String.valueOf(chatId));
         getChatMember.setUserId(userId);
 
         try {
             ChatMember chatMember = execute(getChatMember);
             String status = chatMember.getStatus();
-            return ALL_GROUP_MEMBER_STATUSES.contains(status);
+            return memberStatuses.contains(status);
         } catch (TelegramApiException e) {
             log.warn("Failed to check user {} in chat {}: {}", userId, chatId, e.getMessage());
             return false;
