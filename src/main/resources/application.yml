@@ -5,6 +5,12 @@ spring:
     redis:
       ssl:
         enabled: true
+      host: ${REDIS_HOST}
+      password: ${REDIS_PASSWORD}
+      port: ${REDIS_PORT:6379}
+bot:
+  token: ${BOT_TOKEN}
+  username: ${BOT_USERNAME}
 logging:
   level:
     root: INFO
