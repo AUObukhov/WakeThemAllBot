@@ -15,7 +15,9 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMember;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
-import java.util.Set;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -28,6 +30,12 @@ public class Bot extends TelegramLongPollingBot {
     private static final String MESSAGE_DELETED_ERROR = "[400] Bad Request: message to be replied not found";
     private static final String SEND_FAILED_MESSAGE = "Мой автор криворукий, поэтому я не смог отправить уведомление";
     private static final String NO_MEMBERS_MESSAGE = "Не удалось найти подходящих пользователей для упоминания";
+    private static final String PARSE_MODE = "MarkdownV2";
+    private static final Duration LAST_MENTIONS_DURATION = Duration.ofSeconds(30);
+    private static final int LAST_MENTIONS_LIMIT = 3;
+    private static final String LAST_MENTIONS_LIMIT_MESSAGE = "Пожалейте народ!";
+
+    private final Map<Long, List<Instant>> lastMentions;
 
     private final StorageService storageService;
 
@@ -38,6 +46,7 @@ public class Bot extends TelegramLongPollingBot {
         super(properties.getToken());
         this.storageService = storageService;
         this.botUsername = properties.getUsername();
+        this.lastMentions = new HashMap<>();
     }
 
     @Override
@@ -45,14 +54,14 @@ public class Bot extends TelegramLongPollingBot {
         log.debug("Update received: {}", update);
 
         if (update.hasMyChatMember()) {
-            long chatId = update.getMyChatMember().getChat().getId();
+            Long chatId = update.getMyChatMember().getChat().getId();
             User from = update.getMyChatMember().getFrom();
             saveUser(chatId, from);
         }
 
         if (update.hasMessage()) {
             Message message = update.getMessage();
-            long chatId = message.getChatId();
+            Long chatId = message.getChatId();
             User author = message.getFrom();
             saveUser(chatId, author);
 
@@ -68,13 +77,13 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
-    private void saveUser(long chatId, User user) {
+    private void saveUser(Long chatId, User user) {
         if (!user.getIsBot()) {
             storageService.addUserToChat(String.valueOf(chatId), user);
         }
     }
 
-    private void sendMentions(long chatId, Integer replyToMessageId, User author, Set<String> memberStatuses) {
+    private void sendMentions(Long chatId, Integer replyToMessageId, User author, Set<String> memberStatuses) {
         Set<User> chatUsers = storageService.readUsers(String.valueOf(chatId));
         chatUsers = chatUsers.stream()
                 .filter(user -> !author.getUserName().equals(user.getUserName()))
@@ -83,7 +92,7 @@ public class Bot extends TelegramLongPollingBot {
                 .collect(Collectors.toSet());
 
         if (chatUsers.isEmpty()) {
-            reply(chatId, NO_MEMBERS_MESSAGE, replyToMessageId, false);
+            reply(chatId, escapeMarkdownV2(NO_MEMBERS_MESSAGE), replyToMessageId, false);
             return;
         }
 
@@ -92,12 +101,16 @@ public class Bot extends TelegramLongPollingBot {
         reply(chatId, text, replyToMessageId, true);
     }
 
-    private void reply(long chatId, String text, Integer replyToMessageId, boolean notifyIsCaseOfError) {
+    private void reply(Long chatId, String text, Integer replyToMessageId, boolean notifyIsCaseOfError) {
+        if (!ensureLastMentionsLimit(chatId, replyToMessageId, notifyIsCaseOfError)) {
+            return;
+        }
+
         SendMessage message = SendMessage.builder()
                 .chatId(chatId)
                 .text(text)
                 .replyToMessageId(replyToMessageId)
-                .parseMode("MarkdownV2")
+                .parseMode(PARSE_MODE)
                 .disableWebPagePreview(true)
                 .disableNotification(false)
                 .build();
@@ -110,17 +123,51 @@ public class Bot extends TelegramLongPollingBot {
             } else {
                 log.error(e.getMessage(), e);
                 if (notifyIsCaseOfError) {
-                    send(chatId, SEND_FAILED_MESSAGE, false);
+                    send(chatId, escapeMarkdownV2(SEND_FAILED_MESSAGE), false);
                 }
             }
         }
     }
 
-    private void send(long chatId, String text, boolean notifyIsCaseOfError) {
+    private boolean ensureLastMentionsLimit(Long chatId, Integer replyToMessageId, boolean notifyIsCaseOfError) {
+        if (!lastMentions.containsKey(chatId)) {
+            lastMentions.put(chatId, new ArrayList<>());
+        }
+        Instant now = Instant.now();
+        List<Instant> mentions = lastMentions.get(chatId).stream()
+                .filter(instant -> instant.isAfter(now.minus(LAST_MENTIONS_DURATION)))
+                .collect(Collectors.toCollection(ArrayList::new));
+        lastMentions.put(chatId, mentions);
+        if (mentions.size() > LAST_MENTIONS_LIMIT) {
+            SendMessage message = SendMessage.builder()
+                    .chatId(chatId)
+                    .text(escapeMarkdownV2(LAST_MENTIONS_LIMIT_MESSAGE))
+                    .parseMode(PARSE_MODE)
+                    .replyToMessageId(replyToMessageId)
+                    .disableWebPagePreview(true)
+                    .disableNotification(false)
+                    .build();
+            try {
+                execute(message);
+            } catch (TelegramApiException e) {
+                log.error(e.getMessage(), e);
+                if (e.getMessage() == null || !e.getMessage().contains(MESSAGE_DELETED_ERROR)
+                        && notifyIsCaseOfError) {
+                    send(chatId, escapeMarkdownV2(SEND_FAILED_MESSAGE), false);
+                }
+            }
+            return false;
+        }
+
+        lastMentions.get(chatId).add(now);
+        return true;
+    }
+
+    private void send(Long chatId, String text, boolean notifyIsCaseOfError) {
         SendMessage message = SendMessage.builder()
                 .chatId(chatId)
                 .text(text)
-                .parseMode("MarkdownV2")
+                .parseMode(PARSE_MODE)
                 .disableWebPagePreview(true)
                 .disableNotification(false)
                 .build();
@@ -156,7 +203,7 @@ public class Bot extends TelegramLongPollingBot {
         return text.replaceAll("([_*\\[\\]()~`>#+\\-=|{}.!])", "\\\\$1");
     }
 
-    public boolean isUserGroupMember(long chatId, @NonNull Long userId, Set<String> memberStatuses) {
+    public boolean isUserGroupMember(Long chatId, @NonNull Long userId, Set<String> memberStatuses) {
         GetChatMember getChatMember = new GetChatMember();
         getChatMember.setChatId(String.valueOf(chatId));
         getChatMember.setUserId(userId);
