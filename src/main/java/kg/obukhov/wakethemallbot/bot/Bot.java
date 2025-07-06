@@ -22,6 +22,8 @@ public class Bot extends TelegramLongPollingBot {
 
     private static final String[] TRIGGER_COMMANDS = {"/all", "@all"};
     public static final Set<String> ALL_GROUP_MEMBER_STATUSES = Set.of("member", "administrator", "creator");
+    public static final String MESSAGE_DELETED_ERROR = "[400] Bad Request: message to be replied not found";
+    public static final String SEND_FAILED_MESSAGE = "Мой автор криворукий, поэтому я не смог отправить уведомление";
 
     private final StorageService storageService;
 
@@ -81,8 +83,33 @@ public class Bot extends TelegramLongPollingBot {
 
         String text = getMessageText(chatId, author, chatUsers);
 
+        reply(chatId, text, replyToMessageId);
+    }
+
+    private void reply(long chatId, String text, Integer replyToMessageId) {
         SendMessage message = SendMessage.builder()
+                .chatId(chatId)
+                .text(text)
                 .replyToMessageId(replyToMessageId)
+                .parseMode("MarkdownV2")
+                .disableWebPagePreview(true)
+                .disableNotification(false)
+                .build();
+
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            if (e.getMessage() != null && e.getMessage().contains(MESSAGE_DELETED_ERROR)) {
+                send(chatId, text);
+            } else {
+                log.error(e.getMessage(), e);
+                sendTextMessage(chatId, SEND_FAILED_MESSAGE);
+            }
+        }
+    }
+
+    private void send(long chatId, String text) {
+        SendMessage message = SendMessage.builder()
                 .chatId(chatId)
                 .text(text)
                 .parseMode("MarkdownV2")
@@ -94,7 +121,7 @@ public class Bot extends TelegramLongPollingBot {
             execute(message);
         } catch (TelegramApiException e) {
             log.error(e.getMessage(), e);
-            sendTextMessage(chatId, "Мой автор криворукий, поэтому я не смог отправить уведомление");
+            sendTextMessage(chatId, SEND_FAILED_MESSAGE);
         }
     }
 
