@@ -23,10 +23,11 @@ public class Bot extends TelegramLongPollingBot {
 
     private static final String[] MENTION_ALL_COMMANDS = {"/all", "@all", "/everyone", "@everyone"};
     private static final String[] MENTION_ADMIN_COMMANDS = {"/admins", "@admins", "/administrators", "@administrators"};
-    public static final Set<String> ALL_GROUP_MEMBER_STATUSES = Set.of("member", "administrator", "creator");
-    public static final Set<String> ADMIN_GROUP_MEMBER_STATUSES = Set.of("administrator", "creator");
-    public static final String MESSAGE_DELETED_ERROR = "[400] Bad Request: message to be replied not found";
-    public static final String SEND_FAILED_MESSAGE = "Мой автор криворукий, поэтому я не смог отправить уведомление";
+    private static final Set<String> ALL_GROUP_MEMBER_STATUSES = Set.of("member", "administrator", "creator");
+    private static final Set<String> ADMIN_GROUP_MEMBER_STATUSES = Set.of("administrator", "creator");
+    private static final String MESSAGE_DELETED_ERROR = "[400] Bad Request: message to be replied not found";
+    private static final String SEND_FAILED_MESSAGE = "Мой автор криворукий, поэтому я не смог отправить уведомление";
+    private static final String NO_MEMBERS_MESSAGE = "Не удалось найти подходящих пользователей для упоминания";
 
     private final StorageService storageService;
 
@@ -82,16 +83,16 @@ public class Bot extends TelegramLongPollingBot {
                 .collect(Collectors.toSet());
 
         if (chatUsers.isEmpty()) {
-            sendTextMessage(chatId, "Не удалось найти подходящих пользователей для упоминания");
+            reply(chatId, NO_MEMBERS_MESSAGE, replyToMessageId, false);
             return;
         }
 
         String text = getMessageText(chatUsers);
 
-        reply(chatId, text, replyToMessageId);
+        reply(chatId, text, replyToMessageId, true);
     }
 
-    private void reply(long chatId, String text, Integer replyToMessageId) {
+    private void reply(long chatId, String text, Integer replyToMessageId, boolean notifyIsCaseOfError) {
         SendMessage message = SendMessage.builder()
                 .chatId(chatId)
                 .text(text)
@@ -105,15 +106,17 @@ public class Bot extends TelegramLongPollingBot {
             execute(message);
         } catch (TelegramApiException e) {
             if (e.getMessage() != null && e.getMessage().contains(MESSAGE_DELETED_ERROR)) {
-                send(chatId, text);
+                send(chatId, text, notifyIsCaseOfError);
             } else {
                 log.error(e.getMessage(), e);
-                sendTextMessage(chatId, SEND_FAILED_MESSAGE);
+                if (notifyIsCaseOfError) {
+                    send(chatId, SEND_FAILED_MESSAGE, false);
+                }
             }
         }
     }
 
-    private void send(long chatId, String text) {
+    private void send(long chatId, String text, boolean notifyIsCaseOfError) {
         SendMessage message = SendMessage.builder()
                 .chatId(chatId)
                 .text(text)
@@ -126,7 +129,9 @@ public class Bot extends TelegramLongPollingBot {
             execute(message);
         } catch (TelegramApiException e) {
             log.error(e.getMessage(), e);
-            sendTextMessage(chatId, SEND_FAILED_MESSAGE);
+            if (notifyIsCaseOfError) {
+                send(chatId, SEND_FAILED_MESSAGE, false);
+            }
         }
     }
 
@@ -149,18 +154,6 @@ public class Bot extends TelegramLongPollingBot {
 
     private static String escapeMarkdownV2(String text) {
         return text.replaceAll("([_*\\[\\]()~`>#+\\-=|{}.!])", "\\\\$1");
-    }
-
-    private void sendTextMessage(Long chatId, String text) {
-        SendMessage message = SendMessage.builder()
-                .chatId(chatId.toString())
-                .text(text)
-                .build();
-        try {
-            execute(message);
-        } catch (TelegramApiException e) {
-            log.error(e.getMessage(), e);
-        }
     }
 
     public boolean isUserGroupMember(long chatId, @NonNull Long userId, Set<String> memberStatuses) {
