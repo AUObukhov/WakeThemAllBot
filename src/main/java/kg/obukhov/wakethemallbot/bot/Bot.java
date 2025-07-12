@@ -1,6 +1,7 @@
 package kg.obukhov.wakethemallbot.bot;
 
 import kg.obukhov.wakethemallbot.config.BotProperties;
+import kg.obukhov.wakethemallbot.dto.SimpleUserDto;
 import kg.obukhov.wakethemallbot.service.StorageService;
 import lombok.Getter;
 import lombok.NonNull;
@@ -110,7 +111,7 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private void sendMentions(Long chatId, Integer replyToMessageId, User author, Set<String> memberStatuses) {
-        Set<User> chatUsers = storageService.readUsers(String.valueOf(chatId));
+        Set<SimpleUserDto> chatUsers = storageService.readUsers(String.valueOf(chatId));
         chatUsers = chatUsers.stream()
                 .filter(user -> !author.getUserName().equals(user.getUserName()))
                 .distinct()
@@ -208,14 +209,14 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
-    private String getMessageText(Set<User> users) {
+    private String getMessageText(Set<SimpleUserDto> users) {
         return users.stream()
                 .distinct()
                 .map(Bot::getMentionString)
                 .collect(Collectors.joining(System.lineSeparator()));
     }
 
-    private static String getMentionString(User user) {
+    private static String getMentionString(SimpleUserDto user) {
         String name = user.getLastName() == null
                 ? user.getFirstName()
                 : user.getFirstName() + " " + user.getLastName();

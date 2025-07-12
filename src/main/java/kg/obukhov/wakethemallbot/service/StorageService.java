@@ -25,7 +25,7 @@ public class StorageService {
         setType = objectMapper.getTypeFactory().constructCollectionType(Set.class, SimpleUserDto.class);
     }
 
-    public Set<User> readUsers(String key) {
+    public Set<SimpleUserDto> readUsers(String key) {
         try {
             String json = redisTemplate.opsForValue().get(key);
             return objectMapper.readValue(json, setType);
