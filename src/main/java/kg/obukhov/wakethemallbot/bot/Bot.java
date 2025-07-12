@@ -31,9 +31,9 @@ public class Bot extends TelegramLongPollingBot {
     private static final String SEND_FAILED_MESSAGE = "Мой автор криворукий, поэтому я не смог отправить уведомление";
     private static final String NO_MEMBERS_MESSAGE = "Не удалось найти подходящих пользователей для упоминания";
     private static final String PARSE_MODE = "MarkdownV2";
-    private static final Duration LAST_MENTIONS_DURATION = Duration.ofSeconds(30);
-    private static final int LAST_MENTIONS_LIMIT = 3;
-    private static final String LAST_MENTIONS_LIMIT_MESSAGE = "Пожалейте народ!";
+    private static final Duration LAST_MENTIONS_DURATION = Duration.ofSeconds(5);
+    private static final int LAST_MENTIONS_LIMIT = 1;
+    private static final String LAST_MENTIONS_LIMIT_MESSAGE = "Не флудите. Пожалейте народ!";
     private static final String PERSONAL_CHAT_MESSAGE = "Бот предназначен для групповых чатов";
 
     private final Map<Long, List<Instant>> lastMentions;
@@ -164,7 +164,7 @@ public class Bot extends TelegramLongPollingBot {
                 .filter(instant -> instant.isAfter(now.minus(LAST_MENTIONS_DURATION)))
                 .collect(Collectors.toCollection(ArrayList::new));
         lastMentions.put(chatId, mentions);
-        if (mentions.size() > LAST_MENTIONS_LIMIT) {
+        if (mentions.size() >= LAST_MENTIONS_LIMIT) {
             SendMessage message = SendMessage.builder()
                     .chatId(chatId)
                     .text(escapeMarkdownV2(LAST_MENTIONS_LIMIT_MESSAGE))
