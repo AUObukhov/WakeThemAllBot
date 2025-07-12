@@ -34,6 +34,7 @@ public class Bot extends TelegramLongPollingBot {
     private static final Duration LAST_MENTIONS_DURATION = Duration.ofSeconds(30);
     private static final int LAST_MENTIONS_LIMIT = 3;
     private static final String LAST_MENTIONS_LIMIT_MESSAGE = "Пожалейте народ!";
+    private static final String PERSONAL_CHAT_MESSAGE = "Бот предназначен для групповых чатов";
 
     private final Map<Long, List<Instant>> lastMentions;
 
@@ -62,24 +63,49 @@ public class Bot extends TelegramLongPollingBot {
         if (update.hasMessage()) {
             Message message = update.getMessage();
             Long chatId = message.getChatId();
-            User author = message.getFrom();
-            saveUser(chatId, author);
-
-            if (message.hasText()) {
-                String text = message.getText();
-
-                if (StringUtils.containsAnyIgnoreCase(text, MENTION_ALL_COMMANDS)) {
-                    sendMentions(chatId, message.getMessageId(), author, ALL_GROUP_MEMBER_STATUSES);
-                } else if (StringUtils.containsAnyIgnoreCase(text, MENTION_ADMIN_COMMANDS)) {
-                    sendMentions(chatId, message.getMessageId(), author, ADMIN_GROUP_MEMBER_STATUSES);
-                }
+            if (isGroupChat(chatId)) {
+                User author = message.getFrom();
+                saveUser(chatId, author);
+                sendMentions(message, chatId, author);
+            } else {
+                sendPersonalChatMessage(chatId);
             }
+        }
+    }
+
+    private static boolean isGroupChat(Long chatId) {
+        return chatId < 0;
+    }
+
+    private void sendPersonalChatMessage(Long chatId) {
+        SendMessage message = SendMessage.builder()
+                .chatId(chatId)
+                .text(PERSONAL_CHAT_MESSAGE)
+                .parseMode(PARSE_MODE)
+                .disableWebPagePreview(true)
+                .build();
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            log.error(e.getMessage(), e);
         }
     }
 
     private void saveUser(Long chatId, User user) {
         if (!user.getIsBot()) {
             storageService.addUserToChat(String.valueOf(chatId), user);
+        }
+    }
+
+    private void sendMentions(Message message, Long chatId, User author) {
+        if (message.hasText()) {
+            String text = message.getText();
+
+            if (StringUtils.containsAnyIgnoreCase(text, MENTION_ALL_COMMANDS)) {
+                sendMentions(chatId, message.getMessageId(), author, ALL_GROUP_MEMBER_STATUSES);
+            } else if (StringUtils.containsAnyIgnoreCase(text, MENTION_ADMIN_COMMANDS)) {
+                sendMentions(chatId, message.getMessageId(), author, ADMIN_GROUP_MEMBER_STATUSES);
+            }
         }
     }
 
