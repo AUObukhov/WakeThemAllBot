@@ -2,6 +2,7 @@ package kg.obukhov.wakethemallbot.service;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import kg.obukhov.wakethemallbot.dto.SimpleUserDto;
 import kg.obukhov.wakethemallbot.exception.StorageException;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -21,7 +22,7 @@ public class StorageService {
     public StorageService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
-        setType = objectMapper.getTypeFactory().constructCollectionType(Set.class, User.class);
+        setType = objectMapper.getTypeFactory().constructCollectionType(Set.class, SimpleUserDto.class);
     }
 
     public Set<User> readUsers(String key) {
@@ -36,16 +37,17 @@ public class StorageService {
     public void addUserToChat(String key, User user) {
         try {
             String json = redisTemplate.opsForValue().get(key);
+            SimpleUserDto simpleUserDto = new SimpleUserDto(user);
 
-            Set<User> users = StringUtils.isBlank(json)
+            Set<SimpleUserDto> users = StringUtils.isBlank(json)
                     ? new HashSet<>()
                     : objectMapper.readValue(json, setType);
 
-            if (users.contains(user)) {
+            if (users.contains(simpleUserDto)) {
                 return;
             }
 
-            users.add(user);
+            users.add(simpleUserDto);
 
             String updatedJson = objectMapper.writeValueAsString(users);
             redisTemplate.opsForValue().set(key, updatedJson);

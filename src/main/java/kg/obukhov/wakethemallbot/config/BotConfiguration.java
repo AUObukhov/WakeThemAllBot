@@ -1,5 +1,6 @@
 package kg.obukhov.wakethemallbot.config;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kg.obukhov.wakethemallbot.bot.Bot;
 import kg.obukhov.wakethemallbot.service.StorageService;
@@ -18,7 +19,8 @@ public class BotConfiguration {
 
     @Bean
     public ObjectMapper objectMapper() {
-        return new ObjectMapper();
+        return new ObjectMapper()
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     @Bean
