@@ -190,13 +190,11 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private static String getMentionString(User user) {
-        if (StringUtils.isEmpty(user.getUserName())) {
-            String name = user.getFirstName();
-            String escapedName = escapeMarkdownV2(name);
-            return "[" + escapedName + "](tg://user?id=" + user.getId() + ")";
-        } else {
-            return "@" + escapeMarkdownV2(user.getUserName());
-        }
+        String name = user.getLastName() == null
+                ? user.getFirstName()
+                : user.getFirstName() + " " + user.getLastName();
+        String escapedName = escapeMarkdownV2(name);
+        return "[" + escapedName + "](tg://user?id=" + user.getId() + ")";
     }
 
     private static String escapeMarkdownV2(String text) {
