@@ -10,6 +10,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
@@ -36,6 +37,7 @@ public class Bot extends TelegramLongPollingBot {
     private static final int LAST_MENTIONS_LIMIT = 1;
     private static final String LAST_MENTIONS_LIMIT_MESSAGE = "Не флудите. Пожалейте народ!";
     private static final String PERSONAL_CHAT_MESSAGE = "Бот предназначен для групповых чатов";
+    private static final String MESSAGE_TEXT_TO_DELETE = "delete this message";
 
     private final Map<Long, List<Instant>> lastMentions;
 
@@ -65,6 +67,10 @@ public class Bot extends TelegramLongPollingBot {
             Message message = update.getMessage();
             Long chatId = message.getChatId();
             if (isGroupChat(chatId)) {
+                if (message.getText().contains(MESSAGE_TEXT_TO_DELETE)) {
+                    deleteMessage(chatId, message);
+                    return;
+                }
                 User author = message.getFrom();
                 saveUser(chatId, author);
                 sendMentions(message, chatId, author);
@@ -76,6 +82,19 @@ public class Bot extends TelegramLongPollingBot {
 
     private static boolean isGroupChat(Long chatId) {
         return chatId < 0;
+    }
+
+    private void deleteMessage(Long chatId, Message message) {
+        DeleteMessage deleteMessage = new DeleteMessage();
+        deleteMessage.setChatId(chatId.toString());
+        deleteMessage.setMessageId(message.getMessageId());
+
+        try {
+            execute(deleteMessage);
+        } catch (Exception e) {
+            log.warn("Failed to delete message {} ({}) from chat {}: {}",
+                    message.getMessageId(), message.getText(), chatId, e.getMessage());
+        }
     }
 
     private void sendPersonalChatMessage(Long chatId) {
