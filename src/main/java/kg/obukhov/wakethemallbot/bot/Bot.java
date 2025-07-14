@@ -7,7 +7,9 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.bots.TelegramWebhookBot;
+import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
@@ -23,7 +25,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class Bot extends TelegramLongPollingBot {
+@Component
+public class Bot extends TelegramWebhookBot {
 
     private static final String[] MENTION_ALL_COMMANDS = {"/all", "@all", "/everyone", "@everyone"};
     private static final String[] MENTION_ADMIN_COMMANDS = {"/admins", "@admins", "/administrators", "@administrators"};
@@ -54,7 +57,7 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     @Override
-    public void onUpdateReceived(Update update) {
+    public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
         log.debug("Update received: {}", update);
 
         if (update.hasMyChatMember()) {
@@ -67,9 +70,11 @@ public class Bot extends TelegramLongPollingBot {
             Message message = update.getMessage();
             Long chatId = message.getChatId();
             if (isGroupChat(chatId)) {
-                if (message.getText().contains(MESSAGE_TEXT_TO_DELETE)) {
+                if ((message.getText() != null && message.getText().contains(MESSAGE_TEXT_TO_DELETE))
+                        || (message.getPhoto() != null
+                        && message.getPhoto().getFirst().getFileId().contains("AgACAgIAAxkBAAIn5Ghz1pY4thR15pJFpBwJdmIAAbAO7AACSvoxG1nmoUu_yT"))) {
                     deleteMessage(chatId, message);
-                    return;
+                    return null;
                 }
                 User author = message.getFrom();
                 saveUser(chatId, author);
@@ -78,6 +83,7 @@ public class Bot extends TelegramLongPollingBot {
                 sendPersonalChatMessage(chatId);
             }
         }
+        return null;
     }
 
     private static boolean isGroupChat(Long chatId) {
@@ -260,6 +266,11 @@ public class Bot extends TelegramLongPollingBot {
             log.warn("Failed to check user {} in chat {}: {}", userId, chatId, e.getMessage());
             return false;
         }
+    }
+
+    @Override
+    public String getBotPath() {
+        return "/bot-webhook";
     }
 
 }
