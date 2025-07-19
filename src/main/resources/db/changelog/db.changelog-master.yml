@@ -1,0 +1,77 @@
+databaseChangeLog:
+  - changeSet:
+      id: add-chat-tables
+      author: obukhov
+      changes:
+        - createTable:
+            tableName: chat
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: type
+                  type: varchar(15)
+              - column:
+                  name: title
+                  type: varchar(255)
+  - changeSet:
+      id: add-telegram-user-table
+      author: obukhov
+      changes:
+        - createTable:
+            tableName: telegram_user
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: first_name
+                  type: varchar(64)
+              - column:
+                  name: last_name
+                  type: varchar(64)
+              - column:
+                  name: user_name
+                  type: varchar(32)
+  - changeSet:
+      id: add_user_chat_table
+      author: obukhov
+      changes:
+        - createTable:
+            tableName: user_chat
+            columns:
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: chat_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            columnNames: user_id, chat_id
+            constraintName: pk_user_chat
+            tableName: user_chat
+        - addForeignKeyConstraint:
+            baseColumnNames: user_id
+            baseTableName: user_chat
+            constraintName: fk_userchat_user
+            referencedColumnNames: id
+            referencedTableName: telegram_user
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseColumnNames: chat_id
+            baseTableName: user_chat
+            constraintName: fk_userchat_chat
+            referencedColumnNames: id
+            referencedTableName: chat
+            onDelete: CASCADE

@@ -1,8 +1,9 @@
 package kg.obukhov.wakethemallbot.bot;
 
 import kg.obukhov.wakethemallbot.config.BotProperties;
-import kg.obukhov.wakethemallbot.dto.UserDto;
-import kg.obukhov.wakethemallbot.service.StorageService;
+import kg.obukhov.wakethemallbot.model.ChatEntity;
+import kg.obukhov.wakethemallbot.model.TelegramUserEntity;
+import kg.obukhov.wakethemallbot.service.ChatUserService;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import org.telegram.telegrambots.bots.TelegramWebhookBot;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.User;
@@ -38,18 +40,18 @@ public class Bot extends TelegramWebhookBot {
     private static final Duration LAST_MENTIONS_DURATION = Duration.ofSeconds(5);
     private static final int LAST_MENTIONS_LIMIT = 1;
     private static final String LAST_MENTIONS_LIMIT_MESSAGE = "Не флудите. Пожалейте народ!";
-    private static final String PERSONAL_CHAT_MESSAGE = "Бот предназначен для групповых чатов";
+    private static final String PRIVATE_CHAT_RESPONSE_MESSAGE = "Бот вас запомнил и будет пересылать упоминания в общих чатах";
 
     private final Map<Long, List<Instant>> lastMentions;
 
-    private final StorageService storageService;
+    private final ChatUserService chatUserService;
 
     @Getter
     private final String botUsername;
 
-    public Bot(StorageService storageService, BotProperties properties) {
+    public Bot(ChatUserService chatUserService, BotProperties properties) {
         super(properties.getToken());
-        this.storageService = storageService;
+        this.chatUserService = chatUserService;
         this.botUsername = properties.getUsername();
         this.lastMentions = new HashMap<>();
     }
@@ -59,79 +61,77 @@ public class Bot extends TelegramWebhookBot {
         log.debug("Update received: {}", update);
 
         if (update.hasMyChatMember()) {
-            Long chatId = update.getMyChatMember().getChat().getId();
+            Chat chat = update.getMyChatMember().getChat();
             User from = update.getMyChatMember().getFrom();
-            saveUser(chatId, from);
+            chatUserService.saveChatAndUser(chat, from);
         }
 
         if (update.hasMessage()) {
             Message message = update.getMessage();
-            Long chatId = message.getChatId();
-            if (isGroupChat(chatId)) {
-                User author = message.getFrom();
-                saveUser(chatId, author);
-                sendMentions(message, chatId, author);
+            User author = message.getFrom();
+            chatUserService.saveChatAndUser(message.getChat(), author);
+            if (isGroupChat(message.getChat())) {
+                sendMentions(message, author);
             } else {
-
-                sendPersonalChatMessage(chatId);
+                sendPrivateChatDenialMessage(message.getChat());
             }
         }
 
         return null;
     }
 
-    private static boolean isGroupChat(Long chatId) {
-        return chatId < 0;
+    private static boolean isGroupChat(Chat chat) {
+        return chat.getId() < 0;
     }
 
-    private void sendPersonalChatMessage(Long chatId) {
-        SendMessage message = SendMessage.builder()
-                .chatId(chatId)
-                .text(PERSONAL_CHAT_MESSAGE)
+    private void sendPrivateChatDenialMessage(Chat chat) {
+        SendMessage privateMessage = SendMessage.builder()
+                .chatId(chat.getId())
+                .text(PRIVATE_CHAT_RESPONSE_MESSAGE)
                 .parseMode(PARSE_MODE)
                 .disableWebPagePreview(true)
                 .build();
         try {
-            execute(message);
+            execute(privateMessage);
         } catch (TelegramApiException e) {
             log.error(e.getMessage(), e);
         }
     }
 
-    private void saveUser(Long chatId, User user) {
-        if (!user.getIsBot()) {
-            storageService.addUserToChat(String.valueOf(chatId), user);
+    private void sendMentions(Message message, User author) {
+        if (StringUtils.containsAnyIgnoreCase(message.getText(), MENTION_ALL_COMMANDS)) {
+            log.debug("Sending mentions to all members of chat {}", message.getChat().getTitle());
+            sendMentions(message, author, ALL_GROUP_MEMBER_STATUSES);
+        } else if (StringUtils.containsAnyIgnoreCase(message.getText(), MENTION_ADMIN_COMMANDS)) {
+            log.debug("Sending mentions to admin members of chat {}", message.getChat().getTitle());
+            sendMentions(message, author, ADMIN_GROUP_MEMBER_STATUSES);
+        } else {
+            log.debug("No mention commands found in message {}", message.getMessageId());
         }
     }
 
-    private void sendMentions(Message message, Long chatId, User author) {
-        if (message.hasText()) {
-            String text = message.getText();
+    private void sendMentions(Message messageToReply, User author, Set<String> memberStatuses) {
+        Chat chat = messageToReply.getChat();
+        Set<TelegramUserEntity> chatUsers = getChatUsers(chat, author, memberStatuses);
 
-            if (StringUtils.containsAnyIgnoreCase(text, MENTION_ALL_COMMANDS)) {
-                sendMentions(chatId, message.getMessageId(), author, ALL_GROUP_MEMBER_STATUSES);
-            } else if (StringUtils.containsAnyIgnoreCase(text, MENTION_ADMIN_COMMANDS)) {
-                sendMentions(chatId, message.getMessageId(), author, ADMIN_GROUP_MEMBER_STATUSES);
+        if (chatUsers.isEmpty()) {
+            reply(chat.getId(), escapeMarkdownV2(NO_MEMBERS_MESSAGE), messageToReply.getMessageId(), false);
+        } else {
+            String text = getMessageText(chatUsers);
+            reply(chat.getId(), text, messageToReply.getMessageId(), true);
+            for (TelegramUserEntity user : chatUsers) {
+                sendPrivateMention(user, chat);
             }
         }
     }
 
-    private void sendMentions(Long chatId, Integer replyToMessageId, User author, Set<String> memberStatuses) {
-        Set<UserDto> chatUsers = storageService.readUsers(String.valueOf(chatId));
-        chatUsers = chatUsers.stream()
-                .filter(user -> !author.getUserName().equals(user.getUserName()))
-                .distinct()
-                .filter(user -> isUserGroupMember(chatId, user.getId(), memberStatuses))
+    private Set<TelegramUserEntity> getChatUsers(Chat chat, User excluded, Set<String> memberStatuses) {
+        return chatUserService.findOrMapChat(chat)
+                .getUsers()
+                .stream()
+                .filter(user -> !excluded.getUserName().equals(user.getUserName()))
+                .filter(user -> isUserGroupMember(chat.getId(), user.getId(), memberStatuses))
                 .collect(Collectors.toSet());
-
-        if (chatUsers.isEmpty()) {
-            reply(chatId, escapeMarkdownV2(NO_MEMBERS_MESSAGE), replyToMessageId, false);
-            return;
-        }
-
-        String text = getMessageText(chatUsers);
-
-        reply(chatId, text, replyToMessageId, true);
     }
 
     private void reply(Long chatId, String text, Integer replyToMessageId, boolean notifyIsCaseOfError) {
@@ -159,6 +159,35 @@ public class Bot extends TelegramWebhookBot {
                     send(chatId, escapeMarkdownV2(SEND_FAILED_MESSAGE), false);
                 }
             }
+        }
+    }
+
+    private void sendPrivateMention(TelegramUserEntity user, Chat chat) {
+        ChatEntity privateChat = user.getChats().stream()
+                .filter(userChat -> "private".equals(userChat.getType()))
+                .findFirst()
+                .orElse(null);
+        if (privateChat == null) {
+            log.debug("User {} private chat is unknown", user.getUserName());
+            return;
+        }
+
+        try {
+            log.debug("Sending private message to user {}", user.getUserName());
+
+            String priceMessageText = "Вас упомянули в чате " + chat.getTitle();
+            SendMessage message = SendMessage.builder()
+                    .chatId(privateChat.getId())
+                    .text(priceMessageText)
+                    .parseMode(PARSE_MODE)
+                    .disableWebPagePreview(true)
+                    .disableNotification(false)
+                    .build();
+
+            execute(message);
+        } catch (Exception exception) {
+            log.error("Failed to send message to private chat {} of user {}",
+                    privateChat.getId(), user.getUserName(), exception);
         }
     }
 
@@ -215,14 +244,14 @@ public class Bot extends TelegramWebhookBot {
         }
     }
 
-    private String getMessageText(Set<UserDto> users) {
+    private String getMessageText(Set<TelegramUserEntity> users) {
         return users.stream()
                 .distinct()
                 .map(Bot::getMentionString)
                 .collect(Collectors.joining(System.lineSeparator()));
     }
 
-    private static String getMentionString(UserDto user) {
+    private static String getMentionString(TelegramUserEntity user) {
         String name = user.getLastName() == null
                 ? user.getFirstName()
                 : user.getFirstName() + " " + user.getLastName();
