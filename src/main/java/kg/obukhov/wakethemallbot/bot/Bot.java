@@ -120,7 +120,7 @@ public class Bot extends TelegramWebhookBot {
             String text = getMessageText(chatUsers);
             reply(chat.getId(), text, messageToReply.getMessageId(), true);
             for (TelegramUserEntity user : chatUsers) {
-                sendPrivateMention(user, chat);
+                sendPrivateMention(user, author, chat);
             }
         }
     }
@@ -162,7 +162,7 @@ public class Bot extends TelegramWebhookBot {
         }
     }
 
-    private void sendPrivateMention(TelegramUserEntity user, Chat chat) {
+    private void sendPrivateMention(TelegramUserEntity user, User author, Chat chat) {
         ChatEntity privateChat = user.getChats().stream()
                 .filter(userChat -> "private".equals(userChat.getType()))
                 .findFirst()
@@ -175,10 +175,9 @@ public class Bot extends TelegramWebhookBot {
         try {
             log.debug("Sending private message to user {}", user.getUserName());
 
-            String priceMessageText = "Вас упомянули в чате " + chat.getTitle();
             SendMessage message = SendMessage.builder()
                     .chatId(privateChat.getId())
-                    .text(priceMessageText)
+                    .text(buildPrivateMentionText(user, author, chat))
                     .parseMode(PARSE_MODE)
                     .disableWebPagePreview(true)
                     .disableNotification(false)
@@ -188,6 +187,16 @@ public class Bot extends TelegramWebhookBot {
         } catch (Exception exception) {
             log.error("Failed to send message to private chat {} of user {}",
                     privateChat.getId(), user.getUserName(), exception);
+        }
+    }
+
+    private static String buildPrivateMentionText(TelegramUserEntity user, User author, Chat chat) {
+        if (StringUtils.isEmpty(user.getSalutation())) {
+            return String.format("Вас упомянул пользователь %s в чате %s",
+                    getFullName(author), chat.getTitle());
+        } else {
+            return String.format("%s, вас упомянул пользователь %s в чате %s",
+                    user.getSalutation(), getFullName(author), chat.getTitle());
         }
     }
 
@@ -252,11 +261,21 @@ public class Bot extends TelegramWebhookBot {
     }
 
     private static String getMentionString(TelegramUserEntity user) {
-        String name = user.getLastName() == null
-                ? user.getFirstName()
-                : user.getFirstName() + " " + user.getLastName();
+        String name = getFullName(user);
         String escapedName = escapeMarkdownV2(name);
         return "[" + escapedName + "](tg://user?id=" + user.getId() + ")";
+    }
+
+    private static String getFullName(User user) {
+        return user.getLastName() == null
+                ? user.getFirstName()
+                : user.getFirstName() + " " + user.getLastName();
+    }
+
+    private static String getFullName(TelegramUserEntity user) {
+        return user.getLastName() == null
+                ? user.getFirstName()
+                : user.getFirstName() + " " + user.getLastName();
     }
 
     private static String escapeMarkdownV2(String text) {

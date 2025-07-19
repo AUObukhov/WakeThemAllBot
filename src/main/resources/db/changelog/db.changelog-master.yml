@@ -40,6 +40,9 @@ databaseChangeLog:
               - column:
                   name: user_name
                   type: varchar(32)
+              - column:
+                  name: salutation
+                  type: varchar(64)
   - changeSet:
       id: add_user_chat_table
       author: obukhov

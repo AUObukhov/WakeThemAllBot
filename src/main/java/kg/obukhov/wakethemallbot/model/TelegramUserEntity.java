@@ -26,6 +26,9 @@ public class TelegramUserEntity {
     @Column
     private String userName;
 
+    @Column
+    private String salutation;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_chat",
