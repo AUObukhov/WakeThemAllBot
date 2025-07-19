@@ -7,7 +7,7 @@ import org.telegram.telegrambots.meta.api.objects.User;
 
 @Data
 @NoArgsConstructor
-public class SimpleUserDto {
+public class UserDto {
     private Long id;
 
     @JsonProperty("first_name")
@@ -19,7 +19,9 @@ public class SimpleUserDto {
     @JsonProperty("username")
     private String userName;
 
-    public SimpleUserDto(User user) {
+    private Long chatId;
+
+    public UserDto(User user) {
         this.id = user.getId();
         this.firstName = user.getFirstName();
         this.lastName = user.getLastName();

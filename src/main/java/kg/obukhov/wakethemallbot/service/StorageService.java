@@ -2,7 +2,7 @@ package kg.obukhov.wakethemallbot.service;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import kg.obukhov.wakethemallbot.dto.SimpleUserDto;
+import kg.obukhov.wakethemallbot.dto.UserDto;
 import kg.obukhov.wakethemallbot.exception.StorageException;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -22,10 +22,10 @@ public class StorageService {
     public StorageService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
-        setType = objectMapper.getTypeFactory().constructCollectionType(Set.class, SimpleUserDto.class);
+        setType = objectMapper.getTypeFactory().constructCollectionType(Set.class, UserDto.class);
     }
 
-    public Set<SimpleUserDto> readUsers(String key) {
+    public Set<UserDto> readUsers(String key) {
         try {
             String json = redisTemplate.opsForValue().get(key);
             return objectMapper.readValue(json, setType);
@@ -37,17 +37,19 @@ public class StorageService {
     public void addUserToChat(String key, User user) {
         try {
             String json = redisTemplate.opsForValue().get(key);
-            SimpleUserDto simpleUserDto = new SimpleUserDto(user);
+            UserDto userDto = new UserDto(user);
 
-            Set<SimpleUserDto> users = StringUtils.isBlank(json)
+            Set<UserDto> users = StringUtils.isBlank(json)
                     ? new HashSet<>()
                     : objectMapper.readValue(json, setType);
 
-            if (users.contains(simpleUserDto)) {
+            boolean userStored = users.stream()
+                    .anyMatch(dto -> dto.getId().equals(userDto.getId()));
+            if (userStored) {
                 return;
             }
 
-            users.add(simpleUserDto);
+            users.add(userDto);
 
             String updatedJson = objectMapper.writeValueAsString(users);
             redisTemplate.opsForValue().set(key, updatedJson);
