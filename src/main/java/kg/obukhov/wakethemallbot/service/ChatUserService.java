@@ -31,13 +31,13 @@ public class ChatUserService {
             return;
         }
 
-        ChatEntity chatEntity = chatRepository.findById(chat.getId())
-                .orElseGet(() -> chatRepository.save(chatMapper.toEntity(chat)));
-
         TelegramUserEntity telegramUserEntity = userRepository.findById(user.getId())
                 .orElseGet(() -> userMapper.toEntity(user));
-        if (!telegramUserEntity.getChats().contains(chatEntity)) {
-            telegramUserEntity.getChats().add(chatEntity);
+        boolean userNotSavedToChat = telegramUserEntity.getChats().stream()
+                .map(ChatEntity::getId)
+                .noneMatch(chat.getId()::equals);
+        if (userNotSavedToChat) {
+            telegramUserEntity.getChats().add(chatMapper.toEntity(chat));
             userRepository.save(telegramUserEntity);
         }
     }
