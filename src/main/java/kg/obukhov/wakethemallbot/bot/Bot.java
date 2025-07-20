@@ -115,7 +115,7 @@ public class Bot extends TelegramWebhookBot {
 
     private void sendMentions(Message messageToReply, User author, Set<String> memberStatuses) {
         Chat chat = messageToReply.getChat();
-        Set<TelegramUserEntity> chatUsers = getChatUsers(chat, author);
+        List<TelegramUserEntity> chatUsers = getChatUsers(chat, author);
 
         if (chatUsers.isEmpty()) {
             reply(chat.getId(), escapeMarkdownV2(NO_MEMBERS_MESSAGE), messageToReply.getMessageId(), false);
@@ -132,12 +132,11 @@ public class Bot extends TelegramWebhookBot {
         }
     }
 
-    private Set<TelegramUserEntity> getChatUsers(Chat chat, User excluded) {
-        return chatUserService.findOrMapChat(chat)
-                .getUsers()
+    private List<TelegramUserEntity> getChatUsers(Chat chat, User excluded) {
+        return chatUserService.findAllByChatId(chat.getId())
                 .stream()
                 .filter(user -> !excluded.getUserName().equals(user.getUserName()))
-                .collect(Collectors.toSet());
+                .toList();
     }
 
     private void reply(Long chatId, String text, Integer replyToMessageId, boolean notifyIsCaseOfError) {
@@ -259,9 +258,8 @@ public class Bot extends TelegramWebhookBot {
         }
     }
 
-    private String getMessageText(Set<TelegramUserEntity> users) {
+    private String getMessageText(Collection<TelegramUserEntity> users) {
         return users.stream()
-                .distinct()
                 .map(Bot::getMentionString)
                 .collect(Collectors.joining(System.lineSeparator()));
     }
