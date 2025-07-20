@@ -26,14 +26,26 @@ public class ChatUserService {
     }
 
     public void saveChatAndUser(Chat chat, User user) {
-        if (!user.getIsBot()) {
-            ChatEntity chatEntity = chatRepository.findById(chat.getId())
-                    .orElseGet(() -> chatRepository.save(chatMapper.toEntity(chat)));
+        if (user.getIsBot()) {
+            return;
+        }
 
-            TelegramUserEntity telegramUserEntity = userRepository.findById(user.getId())
-                    .orElseGet(() -> userMapper.toEntity(user));
+        ChatEntity chatEntity = chatRepository.findById(chat.getId())
+                .orElseGet(() -> chatRepository.save(chatMapper.toEntity(chat)));
+
+        TelegramUserEntity telegramUserEntity = userRepository.findById(user.getId())
+                .orElseGet(() -> userMapper.toEntity(user));
+        if (!telegramUserEntity.getChats().contains(chatEntity)) {
             telegramUserEntity.getChats().add(chatEntity);
             userRepository.save(telegramUserEntity);
         }
     }
+
+    public void removeUserFromChat(TelegramUserEntity user, Chat chat) {
+        ChatEntity chatEntity = chatRepository.findById(chat.getId())
+                .orElse(null);
+        user.getChats().remove(chatEntity);
+        userRepository.save(user);
+    }
+
 }

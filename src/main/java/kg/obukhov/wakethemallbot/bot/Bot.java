@@ -9,6 +9,8 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 import org.telegram.telegrambots.bots.TelegramWebhookBot;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember;
@@ -57,6 +59,7 @@ public class Bot extends TelegramWebhookBot {
     }
 
     @Override
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
         log.debug("Update received: {}", update);
 
@@ -112,7 +115,7 @@ public class Bot extends TelegramWebhookBot {
 
     private void sendMentions(Message messageToReply, User author, Set<String> memberStatuses) {
         Chat chat = messageToReply.getChat();
-        Set<TelegramUserEntity> chatUsers = getChatUsers(chat, author, memberStatuses);
+        Set<TelegramUserEntity> chatUsers = getChatUsers(chat, author);
 
         if (chatUsers.isEmpty()) {
             reply(chat.getId(), escapeMarkdownV2(NO_MEMBERS_MESSAGE), messageToReply.getMessageId(), false);
@@ -120,17 +123,20 @@ public class Bot extends TelegramWebhookBot {
             String text = getMessageText(chatUsers);
             reply(chat.getId(), text, messageToReply.getMessageId(), true);
             for (TelegramUserEntity user : chatUsers) {
-                sendPrivateMention(user, author, chat);
+                if (isUserGroupMember(chat.getId(), user.getId(), memberStatuses)) {
+                    sendPrivateMention(user, author, chat);
+                } else {
+                    chatUserService.removeUserFromChat(user, chat);
+                }
             }
         }
     }
 
-    private Set<TelegramUserEntity> getChatUsers(Chat chat, User excluded, Set<String> memberStatuses) {
+    private Set<TelegramUserEntity> getChatUsers(Chat chat, User excluded) {
         return chatUserService.findOrMapChat(chat)
                 .getUsers()
                 .stream()
                 .filter(user -> !excluded.getUserName().equals(user.getUserName()))
-                .filter(user -> isUserGroupMember(chat.getId(), user.getId(), memberStatuses))
                 .collect(Collectors.toSet());
     }
 
