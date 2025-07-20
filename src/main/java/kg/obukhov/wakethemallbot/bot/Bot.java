@@ -9,8 +9,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Transactional;
 import org.telegram.telegrambots.bots.TelegramWebhookBot;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember;
@@ -59,8 +57,12 @@ public class Bot extends TelegramWebhookBot {
     }
 
     @Override
-    @Transactional(isolation = Isolation.SERIALIZABLE)
     public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
+        new Thread(() -> handleUpdate(update)).start();
+        return null;
+    }
+
+    private synchronized void handleUpdate(Update update) {
         log.debug("Update received: {}", update);
 
         if (update.hasMyChatMember()) {
@@ -79,8 +81,6 @@ public class Bot extends TelegramWebhookBot {
                 sendPrivateChatDenialMessage(message.getChat());
             }
         }
-
-        return null;
     }
 
     private static boolean isGroupChat(Chat chat) {
