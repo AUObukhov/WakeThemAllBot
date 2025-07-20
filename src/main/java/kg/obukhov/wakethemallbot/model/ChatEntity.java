@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -25,6 +26,7 @@ public class ChatEntity {
 
     @ManyToMany(mappedBy = "chats", fetch = FetchType.EAGER)
     @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private Set<TelegramUserEntity> users = new HashSet<>();
 
 }
