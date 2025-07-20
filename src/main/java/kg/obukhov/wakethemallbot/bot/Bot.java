@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 @Component
 public class Bot extends TelegramWebhookBot {
 
-    private static final String[] MENTION_ALL_COMMANDS = {"/all", "@all", "/everyone", "@everyone"};
+    private static final String[] MENTION_ALL_COMMANDS = {"/all", "@all", "/everyone", "@everyone", "@ёу"};
     private static final String[] MENTION_ADMIN_COMMANDS = {"/admins", "@admins", "/administrators", "@administrators"};
     private static final Set<String> ALL_GROUP_MEMBER_STATUSES = Set.of("member", "administrator", "creator");
     private static final Set<String> ADMIN_GROUP_MEMBER_STATUSES = Set.of("administrator", "creator");
