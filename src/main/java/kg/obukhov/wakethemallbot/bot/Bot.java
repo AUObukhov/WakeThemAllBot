@@ -177,10 +177,11 @@ public class Bot extends TelegramWebhookBot {
             return;
         }
 
+        SendMessage message = null;
         try {
             log.debug("Sending private message to user {}", user.getUserName());
 
-            SendMessage message = SendMessage.builder()
+            message = SendMessage.builder()
                     .chatId(privateChat.getId())
                     .text(buildPrivateMentionText(user, author, chat))
                     .parseMode(PARSE_MODE)
@@ -190,19 +191,18 @@ public class Bot extends TelegramWebhookBot {
 
             execute(message);
         } catch (Exception exception) {
-            log.error("Failed to send message to private chat {} of user {}",
-                    privateChat.getId(), user.getUserName(), exception);
+            log.error("Failed to send message to private chat {} of user {}. Message:\n{}",
+                    privateChat.getId(), user.getUserName(), message, exception);
         }
     }
 
     private static String buildPrivateMentionText(TelegramUserEntity user, User author, Chat chat) {
-        if (StringUtils.isEmpty(user.getSalutation())) {
-            return String.format("Вас упомянул пользователь %s в чате %s",
-                    getFullName(author), chat.getTitle());
-        } else {
-            return String.format("%s, вас упомянул пользователь %s в чате %s",
-                    user.getSalutation(), getFullName(author), chat.getTitle());
-        }
+        String text = StringUtils.isEmpty(user.getSalutation())
+                ? String.format("Вас упомянул пользователь %s в чате %s",
+                getFullName(author), chat.getTitle())
+                : String.format("%s, вас упомянул пользователь %s в чате %s",
+                user.getSalutation(), getFullName(author), chat.getTitle());
+        return escapeMarkdownV2(text);
     }
 
     private boolean ensureLastMentionsLimit(Long chatId, Integer replyToMessageId, boolean notifyIsCaseOfError) {
