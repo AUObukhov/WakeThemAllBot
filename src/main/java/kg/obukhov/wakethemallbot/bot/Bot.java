@@ -257,7 +257,7 @@ public class Bot extends TelegramLongPollingBot {
     private String getMessageText(Collection<TelegramUserEntity> users) {
         return users.stream()
                 .map(Bot::getMentionString)
-                .collect(Collectors.joining(System.lineSeparator()));
+                .collect(Collectors.joining(" "));
     }
 
     private static String getMentionString(TelegramUserEntity user) {
