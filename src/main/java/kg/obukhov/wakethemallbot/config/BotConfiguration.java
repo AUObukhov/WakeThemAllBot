@@ -34,6 +34,8 @@ public class BotConfiguration {
         Bot bot = new Bot(chatUserService, botProperties);
         botsApi.registerBot(bot);
 
+        bot.registerCommands();
+
         log.info("{} started!", botProperties.getUsername());
 
         return bot;
