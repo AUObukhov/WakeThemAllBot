@@ -17,3 +17,6 @@ logging:
     root: INFO
 server:
   port: ${PORT:8080}
+
+app:
+  webhook-url: ${WEBHOOK_URL}

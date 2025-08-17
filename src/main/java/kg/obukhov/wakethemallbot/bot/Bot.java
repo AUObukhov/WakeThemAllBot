@@ -8,7 +8,9 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.bots.TelegramWebhookBot;
+import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -27,7 +29,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class Bot extends TelegramLongPollingBot {
+@Component
+public class Bot extends TelegramWebhookBot {
 
     private static final String[] MENTION_ALL_COMMANDS = {"/all", "@all", "/everyone", "@everyone", "@ёу"};
     private static final String[] MENTION_ADMIN_COMMANDS = {"/admins", "@admins", "/administrators", "@administrators"};
@@ -70,11 +73,12 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     @Override
-    public void onUpdateReceived(Update update) {
-        handleUpdate(update);
+    public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
+        new Thread(() -> handleUpdate(update)).start();
+        return null;
     }
 
-    private void handleUpdate(Update update) {
+    private synchronized void handleUpdate(Update update) {
         log.debug("Update received: {}", update);
 
         if (update.hasMyChatMember()) {
@@ -307,6 +311,11 @@ public class Bot extends TelegramLongPollingBot {
             log.warn("Failed to check user {} in chat {}: {}", userId, chatId, e.getMessage());
             return false;
         }
+    }
+
+    @Override
+    public String getBotPath() {
+        return "/bot-webhook";
     }
 
 }
