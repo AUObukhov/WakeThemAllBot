@@ -195,7 +195,7 @@ public class Bot extends TelegramLongPollingBot {
 
             message = SendMessage.builder()
                     .chatId(privateChat.getId())
-                    .text(buildPrivateMentionText(user, author, chat))
+                    .text(buildPrivateMentionText(author, chat))
                     .parseMode(PARSE_MODE)
                     .disableWebPagePreview(true)
                     .disableNotification(false)
@@ -208,12 +208,8 @@ public class Bot extends TelegramLongPollingBot {
         }
     }
 
-    private static String buildPrivateMentionText(TelegramUserEntity user, User author, Chat chat) {
-        String text = StringUtils.isEmpty(user.getSalutation())
-                ? String.format("Вас упомянул пользователь %s в чате %s",
-                getFullName(author), chat.getTitle())
-                : String.format("%s, вас упомянул пользователь %s в чате %s",
-                user.getSalutation(), getFullName(author), chat.getTitle());
+    private static String buildPrivateMentionText(User author, Chat chat) {
+        String text = String.format("Вас упомянул пользователь %s в чате %s", getFullName(author), chat.getTitle());
         return escapeMarkdownV2(text);
     }
 
