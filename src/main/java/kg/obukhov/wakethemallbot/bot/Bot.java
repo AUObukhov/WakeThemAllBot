@@ -41,6 +41,7 @@ public class Bot extends TelegramLongPollingBot {
     private static final int LAST_MENTIONS_LIMIT = 1;
     private static final String LAST_MENTIONS_LIMIT_MESSAGE = "Не флудите. Пожалейте народ!";
     private static final String PRIVATE_CHAT_RESPONSE_MESSAGE = "Бот вас запомнил и будет пересылать упоминания в общих чатах";
+    private static final Duration REPLY_TIMEOUT = Duration.ofMinutes(30);
 
     private final Map<Long, List<Instant>> lastMentions;
 
@@ -126,6 +127,13 @@ public class Bot extends TelegramLongPollingBot {
     }
 
     private void sendMentions(Message messageToReply, User author, Set<String> memberStatuses) {
+        Instant messageInstant = Instant.ofEpochSecond(messageToReply.getDate());
+        Duration messageAge = Duration.between(messageInstant, Instant.now());
+        if (messageAge.compareTo(REPLY_TIMEOUT) > 0) {
+            log.info("Message {} was sent at {}. Ignoring reply", messageToReply.getMessageId(), messageInstant);
+            return;
+        }
+
         Chat chat = messageToReply.getChat();
         List<TelegramUserEntity> chatUsers = getChatUsers(chat, author);
 
